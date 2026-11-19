@@ -1,0 +1,12 @@
+{
+  "name": "vellum-plugins-for-q-sys",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Development tests for Vellum plugins for the Q-SYS platform",
+  "scripts": {
+    "test": "fengari tests\\Blackmagic-Design\\videohub_spec.lua"
+  },
+  "devDependencies": {
+    "fengari-node-cli": "^0.1.0"
+  }
+}

@@ -1,0 +1,395 @@
+PluginInfo = {
+  Name = "Blackmagic Design Videohub",
+  Version = "0.1.0.0",
+  BuildVersion = "0.1.0.0",
+  Id = "6a1525ed-9337-4728-8618-0a6fb890fa5a",
+  Author = "Vellum",
+  Description = "Blackmagic Videohub routing control"
+}
+
+local profiles = {
+  ["Videohub Mini 4x2 12G"] = { inputs = 4, outputs = 2 },
+  ["Videohub 10x10 12G"] = { inputs = 10, outputs = 10 },
+  ["Videohub 20x20 12G"] = { inputs = 20, outputs = 20 },
+  ["Smart Videohub 12x12"] = { inputs = 12, outputs = 12 },
+  ["Smart Videohub 16x16"] = { inputs = 16, outputs = 16 },
+  ["Smart Videohub 20x20"] = { inputs = 20, outputs = 20 },
+  ["Smart Videohub CleanSwitch 12x12"] = { inputs = 12, outputs = 12 }
+}
+local profileNames = {
+  "Videohub 10x10 12G", "Videohub 20x20 12G", "Videohub Mini 4x2 12G",
+  "Smart Videohub 12x12", "Smart Videohub 16x16", "Smart Videohub 20x20",
+  "Smart Videohub CleanSwitch 12x12"
+}
+local pages = { "Connection", "Crosspoints" }
+
+local function crosspointName(output, input)
+  return string.format("Crosspoint %02d %02d", output, input)
+end
+
+local function inputName(input)
+  return string.format("Input %02d Label", input)
+end
+
+local function outputName(output)
+  return string.format("Output %02d Label", output)
+end
+
+local function lockName(output)
+  return string.format("Output %02d Lock", output)
+end
+
+function GetProperties()
+  return {
+    { Name = "Model", Type = "enum", Choices = profileNames, Value = profileNames[1] }
+  }
+end
+
+function GetPrettyName(props)
+  return "Blackmagic Design Videohub\n" .. props["Model"].Value
+end
+
+function GetColor()
+  return { 42, 75, 96 }
+end
+
+function GetPages()
+  return { { name = pages[1] }, { name = pages[2] } }
+end
+
+function GetControls(props)
+  local profile = profiles[props["Model"].Value]
+  local controls = {
+    { Name = "IP Address", ControlType = "Text", Count = 1, UserPin = true, PinStyle = "Input" },
+    { Name = "Connection", ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" },
+    { Name = "Ready", ControlType = "Indicator", IndicatorType = "Led", Count = 1, UserPin = true, PinStyle = "Output" },
+    { Name = "Device Model", ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" },
+    { Name = "Device I/O", ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" },
+    { Name = "Last Error", ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" }
+  }
+  for input = 1, profile.inputs do
+    table.insert(controls, { Name = inputName(input), ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" })
+  end
+  for output = 1, profile.outputs do
+    table.insert(controls, { Name = outputName(output), ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" })
+    table.insert(controls, { Name = lockName(output), ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" })
+    for input = 1, profile.inputs do
+      table.insert(controls, {
+        Name = crosspointName(output, input), ControlType = "Button",
+        ButtonType = "Toggle", Count = 1, UserPin = true, PinStyle = "Both"
+      })
+    end
+  end
+  return controls
+end
+
+local function text(graphics, value, x, y, width, height)
+  table.insert(graphics, {
+    Type = "Text", Text = value, Position = { x, y },
+    Size = { width, height }, FontSize = 11, HTextAlign = "Left"
+  })
+end
+
+function GetControlLayout(props)
+  local profile = profiles[props["Model"].Value]
+  local layout, graphics = {}, {}
+  if pages[props["page_index"].Value] == "Connection" then
+    local rows = {
+      { "IP Address", "Videohub IP address" },
+      { "Connection", "Connection" },
+      { "Device Model", "Reported model" },
+      { "Device I/O", "Reported I/O" },
+      { "Last Error", "Last error" }
+    }
+    for index, row in ipairs(rows) do
+      local y = 16 + (index - 1) * 32
+      text(graphics, row[2], 12, y, 130, 24)
+      layout[row[1]] = {
+        PrettyName = row[1], Style = row[1] == "IP Address" and "TextBox" or "Text",
+        Position = { 145, y }, Size = { 420, 24 }
+      }
+    end
+    layout["Ready"] = {
+      PrettyName = "Ready", Style = "Led",
+      Position = { 580, 50 }, Size = { 20, 20 }
+    }
+    text(graphics, "Ready", 605, 48, 65, 24)
+  else
+    local left, top, cellWidth, cellHeight = 170, 105, 66, 27
+    text(graphics, "Outputs / Inputs", 8, 76, 158, 22)
+    for input = 1, profile.inputs do
+      local x = left + (input - 1) * cellWidth
+      text(graphics, tostring(input), x, 12, cellWidth - 2, 20)
+      layout[inputName(input)] = {
+        PrettyName = "Input " .. input .. "~Label", Style = "Text",
+        Position = { x, 34 }, Size = { cellWidth - 2, 42 }
+      }
+    end
+    for output = 1, profile.outputs do
+      local y = top + (output - 1) * cellHeight
+      text(graphics, tostring(output), 8, y, 25, 22)
+      layout[outputName(output)] = {
+        PrettyName = "Output " .. output .. "~Label", Style = "Text",
+        Position = { 32, y }, Size = { 105, 22 }
+      }
+      layout[lockName(output)] = {
+        PrettyName = "Output " .. output .. "~Lock", Style = "Text",
+        Position = { 138, y }, Size = { 30, 22 }
+      }
+      for input = 1, profile.inputs do
+        layout[crosspointName(output, input)] = {
+          PrettyName = string.format("Output %02d~Input %02d", output, input),
+          Style = "Button", Position = { left + (input - 1) * cellWidth, y },
+          Size = { cellWidth - 4, 22 }
+        }
+      end
+    end
+  end
+  return layout, graphics
+end
+
+if Controls then
+  local profile = profiles[Properties["Model"].Value]
+  local socket, buffer = nil, ""
+  local connected, deviceValid, ready = false, false, false
+  local routes, locks = {}, {}
+  local heartbeat, syncTimer = Timer.New(), Timer.New()
+
+  local function setStatus(message)
+    Controls["Connection"].String = message
+  end
+
+  local function setReady(value)
+    ready = value
+    Controls["Ready"].Boolean = value
+  end
+
+  local function setError(message)
+    Controls["Last Error"].String = message
+    print("Blackmagic Design Videohub: " .. message)
+  end
+
+  local function refreshOutput(output)
+    for input = 1, profile.inputs do
+      Controls[crosspointName(output, input)].Boolean = ready and routes[output] == input
+    end
+  end
+
+  local function resetState()
+    syncTimer:Stop()
+    connected, deviceValid = false, false
+    setReady(false)
+    routes, locks, buffer = {}, {}, ""
+    Controls["Device Model"].String = ""
+    Controls["Device I/O"].String = ""
+    for input = 1, profile.inputs do
+      Controls[inputName(input)].String = "Input " .. input
+    end
+    for output = 1, profile.outputs do
+      Controls[outputName(output)].String = "Output " .. output
+      Controls[lockName(output)].String = "?"
+      refreshOutput(output)
+    end
+  end
+
+  local function updateReady()
+    local wasReady = ready
+    local complete = connected and deviceValid
+    for output = 1, profile.outputs do
+      if not routes[output] then complete = false end
+    end
+    setReady(complete)
+    if wasReady and not ready then syncTimer:Start(15) end
+    if ready then
+      syncTimer:Stop()
+      setStatus("Connected")
+    elseif connected and deviceValid then setStatus("Synchronizing") end
+    for output = 1, profile.outputs do refreshOutput(output) end
+  end
+
+  local function handleDevice(lines)
+    local fields = {}
+    for _, line in ipairs(lines) do
+      local key, value = line:match("^([^:]+):%s*(.*)$")
+      if key then fields[key] = value end
+    end
+    if fields["Device present"] ~= "true" then
+      deviceValid, routes, locks = false, {}, {}
+      setReady(false)
+      Controls["Device Model"].String = ""
+      Controls["Device I/O"].String = ""
+      for output = 1, profile.outputs do
+        Controls[lockName(output)].String = "?"
+        refreshOutput(output)
+      end
+      setStatus("Device unavailable")
+      setError("Device present: " .. (fields["Device present"] or "unknown"))
+      return
+    end
+    local inputs = tonumber(fields["Video inputs"])
+    local outputs = tonumber(fields["Video outputs"])
+    Controls["Device Model"].String = fields["Model name"] or "Unknown"
+    Controls["Device I/O"].String = string.format("%s inputs / %s outputs", tostring(inputs or "?"), tostring(outputs or "?"))
+    if inputs ~= profile.inputs or outputs ~= profile.outputs then
+      deviceValid, routes, locks = false, {}, {}
+      setReady(false)
+      for output = 1, profile.outputs do
+        Controls[lockName(output)].String = "?"
+        refreshOutput(output)
+      end
+      setStatus("Model mismatch")
+      setError(string.format("Selected profile requires %d inputs / %d outputs; device reports %s / %s.",
+        profile.inputs, profile.outputs, tostring(inputs or "?"), tostring(outputs or "?")))
+      return
+    end
+    deviceValid = true
+    updateReady()
+  end
+
+  local function handleBlock(block)
+    local lines = {}
+    for line in (block .. "\n"):gmatch("(.-)\n") do table.insert(lines, line) end
+    local header = table.remove(lines, 1)
+    if header == "VIDEOHUB DEVICE:" then
+      handleDevice(lines)
+    elseif header == "NAK" then
+      setError("Videohub rejected a command (NAK).")
+    elseif deviceValid and (header == "INPUT LABELS:" or header == "OUTPUT LABELS:") then
+      local isInput = header == "INPUT LABELS:"
+      for _, line in ipairs(lines) do
+        local index, label = line:match("^(%d+)%s+(.*)$")
+        index = tonumber(index)
+        if index and index < (isInput and profile.inputs or profile.outputs) then
+          Controls[isInput and inputName(index + 1) or outputName(index + 1)].String = label
+        end
+      end
+    elseif deviceValid and header == "VIDEO OUTPUT LOCKS:" then
+      for _, line in ipairs(lines) do
+        local index, state = line:match("^(%d+)%s+([ULO])%s*$")
+        index = tonumber(index)
+        if index and index < profile.outputs then
+          locks[index + 1] = state
+          Controls[lockName(index + 1)].String = state
+        end
+      end
+    elseif deviceValid and header == "VIDEO OUTPUT ROUTING:" then
+      for _, line in ipairs(lines) do
+        local output, input = line:match("^(%d+)%s+(%S+)%s*$")
+        output, input = tonumber(output), tonumber(input)
+        if output and output < profile.outputs then
+          if input and input >= 0 and input < profile.inputs and input == math.floor(input) then
+            routes[output + 1] = input + 1
+          else
+            routes[output + 1] = nil
+            setError("Device reported an out-of-range input for output " .. (output + 1) .. ".")
+          end
+        end
+      end
+      updateReady()
+    end
+  end
+
+  local function validAddress(address)
+    local a, b, c, d = address:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+    if not a then return false end
+    for _, octet in ipairs({ a, b, c, d }) do
+      if #octet > 3 or tonumber(octet) > 255 then return false end
+    end
+    return true
+  end
+
+  local function connect()
+    heartbeat:Stop()
+    local previous = socket
+    socket = nil
+    if previous then
+      previous.ReconnectTimeout = 0
+      previous:Disconnect()
+    end
+    resetState()
+    local address = Controls["IP Address"].String:match("^%s*(.-)%s*$")
+    if address == "" then
+      setStatus("Enter IP address")
+      return
+    end
+    if not validAddress(address) then
+      setStatus("Invalid IP address")
+      setError("Enter a valid IPv4 address.")
+      return
+    end
+    Controls["Last Error"].String = ""
+    local client = TcpSocket.New()
+    socket = client
+    client.ReadTimeout = 45
+    client.WriteTimeout = 5
+    client.ReconnectTimeout = 5
+    client.EventHandler = function(source, event, err)
+      if source ~= socket then return end
+      if event == TcpSocket.Events.Connected then
+        resetState()
+        connected = true
+        setStatus("Synchronizing")
+        heartbeat:Start(20)
+        syncTimer:Start(15)
+      elseif event == TcpSocket.Events.Data then
+        buffer = buffer .. source:Read(source.BufferLength)
+        buffer = buffer:gsub("\r\n", "\n")
+        if #buffer > 1048576 then
+          setError("Protocol buffer exceeded 1 MiB; reconnecting.")
+          source:Disconnect()
+          connect()
+          return
+        end
+        while true do
+          local ending = buffer:find("\n\n", 1, true)
+          if not ending then break end
+          local block = buffer:sub(1, ending - 1)
+          buffer = buffer:sub(ending + 2)
+          handleBlock(block)
+        end
+      elseif event == TcpSocket.Events.Reconnect then
+        heartbeat:Stop()
+        resetState()
+        setStatus("Reconnecting")
+      elseif event == TcpSocket.Events.Closed or event == TcpSocket.Events.Error or event == TcpSocket.Events.Timeout then
+        heartbeat:Stop()
+        resetState()
+        setStatus("Disconnected")
+        setError("Connection " .. tostring(event) .. (err and (": " .. tostring(err)) or ""))
+      end
+    end
+    setStatus("Connecting")
+    client:Connect(address, 9990)
+  end
+
+  heartbeat.EventHandler = function()
+    if connected and socket then socket:Write("PING:\n\n") end
+  end
+  syncTimer.EventHandler = function()
+    syncTimer:Stop()
+    if connected and not ready and Controls["Connection"].String == "Synchronizing" then
+      setStatus("Synchronization incomplete")
+      setError("Device did not provide complete routing information.")
+    end
+  end
+  Controls["IP Address"].EventHandler = connect
+  for output = 1, profile.outputs do
+    for input = 1, profile.inputs do
+      local out, inp = output, input
+      local control = Controls[crosspointName(out, inp)]
+      control.EventHandler = function()
+        local requested = control.Boolean
+        refreshOutput(out)
+        if not requested then return end
+        if not ready or not socket then
+          setError("Cannot route: device is not synchronized.")
+        elseif locks[out] == "L" then
+          setError("Cannot route: output " .. out .. " is locked by another client.")
+        elseif routes[out] ~= inp then
+          socket:Write(string.format("VIDEO OUTPUT ROUTING:\n%d %d\n\n", out - 1, inp - 1))
+        end
+      end
+    end
+  end
+  connect()
+end
