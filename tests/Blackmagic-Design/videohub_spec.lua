@@ -14,8 +14,9 @@ local expected = {
 for model, size in pairs(expected) do
   local props = { Model = { Value = model }, page_index = { Value = 2 } }
   local controls, layout = GetControls(props), GetControlLayout(props)
-  local crosspoints = 0
+  local crosspoints, controlsByName = 0, {}
   for _, control in ipairs(controls) do
+    controlsByName[control.Name] = control
     if control.Name:match("^Crosspoint ") then
       crosspoints = crosspoints + 1
       assert(control.PinStyle == "Both" and control.UserPin)
@@ -23,6 +24,18 @@ for model, size in pairs(expected) do
     end
   end
   assert(crosspoints == size[1] * size[2], model .. " crosspoint count")
+  for output = 1, size[2] do
+    local labelName = "Output " .. output .. " Label"
+    local lockName = "Output " .. output .. " Lock"
+    assert(controlsByName[labelName], "missing output label pin " .. labelName)
+    assert(controlsByName[lockName], "missing output lock pin " .. lockName)
+    if output < 10 then
+      assert(not controlsByName[string.format("Output %02d Label", output)])
+      assert(not controlsByName[string.format("Output %02d Lock", output)])
+    end
+    local firstCrosspoint = string.format("Crosspoint %02d 01", output)
+    assert(layout[firstCrosspoint].PrettyName == "Output " .. output .. "~Input 01")
+  end
 end
 
 Properties = { Model = { Value = "Videohub 10x10 12G" } }
@@ -105,7 +118,7 @@ sock:feed("INPUT LABELS:\n0 Camera A\n\nOUTPUT LABELS:\n0 Program\n\nVIDEO OUTPU
 assert(Controls["Connection"].String == "Connected")
 assert(Controls["Ready"].Boolean)
 assert(Controls["Input 01 Label"].String == "Camera A")
-assert(Controls["Output 01 Label"].String == "Program")
+assert(Controls["Output 1 Label"].String == "Program")
 assert(Controls["Crosspoint 01 01"].Boolean)
 assert(not Controls["Crosspoint 01 02"].Boolean)
 

@@ -32,11 +32,11 @@ local function inputName(input)
 end
 
 local function outputName(output)
-  return string.format("Output %02d Label", output)
+  return "Output " .. output .. " Label"
 end
 
 local function lockName(output)
-  return string.format("Output %02d Lock", output)
+  return "Output " .. output .. " Lock"
 end
 
 function GetProperties()
@@ -138,7 +138,7 @@ function GetControlLayout(props)
       }
       for input = 1, profile.inputs do
         layout[crosspointName(output, input)] = {
-          PrettyName = string.format("Output %02d~Input %02d", output, input),
+          PrettyName = string.format("Output %d~Input %02d", output, input),
           Style = "Button", Position = { left + (input - 1) * cellWidth, y },
           Size = { cellWidth - 4, 22 }
         }

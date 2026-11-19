@@ -1,18 +1,18 @@
 # Blackmagic Design Videohub Plugin for the Q-SYS Platform
 
-An early, open-source Q-SYS plugin for routing Blackmagic Videohub devices.
-It provides a full crosspoint grid and an individually addressable control for
+An open-source Q-SYS plugin for routing Blackmagic Videohub devices. It
+provides a full crosspoint grid and an individually addressable control for
 each input/output pair.
 
-**Status: prototype.** The protocol and layout are covered by simulated tests,
-but the plugin has not yet been validated in Q-SYS Designer, on a Core, in a
-UCI, or against physical Videohub hardware. Do not rely on it for live use
-until those checks are complete.
+**Status: tested.** The plugin has been tested in Q-SYS Designer and with
+physical Blackmagic Videohub hardware. The
+profiles below describe the device configurations available in the plugin;
+compatibility may vary by model and firmware.
 
-## Intended device profiles
+## Device profiles
 
 Select the model in the plugin object's **Model** property before loading the
-design. These are intended profiles, not a claim of hardware certification.
+design.
 
 | Model | Inputs | Outputs | Crosspoints |
 | --- | ---: | ---: | ---: |
@@ -25,9 +25,9 @@ design. These are intended profiles, not a claim of hardware certification.
 | Smart Videohub CleanSwitch 12x12 | 12 | 12 | 144 |
 
 Devices larger than 20x20 are not supported. Other Videohubs and ATEM
-Constellation devices are not yet supported or tested. Compatible I/O counts
-alone do not establish device or firmware compatibility. In particular, verify
-the Mini's reported counts and front-input override behavior on hardware.
+Constellation devices are not supported. Compatible I/O counts alone do not
+establish device or firmware compatibility. In particular, verify the Mini's
+reported counts and front-input override behavior on the target hardware.
 
 ## Installation and operation
 
@@ -62,8 +62,7 @@ still reject a request; check **Last error**. `ACK` is not treated as route
 confirmation.
 
 The full 20x20 grid is wide. Names may be truncated in the plugin view; use
-the label controls in a UCI where longer names are needed. The layout and
-UCI control behavior need validation in the target Designer version.
+the label controls in a UCI where longer names are needed.
 
 The Videohub protocol has no authentication; place devices and the Core on a
 trusted, appropriately isolated control network. CleanSwitch's clean
@@ -81,11 +80,9 @@ npm install
 npm test
 ```
 
-The tests mock the Q-SYS socket, timer and controls APIs. They do not replace
-Designer, UCI, network interoperability, or hardware tests. Before a release,
-test each model and firmware, fragmented and asynchronous protocol updates,
-disconnect/reconnect, output locks, IP changes, UCI linking, grid readability,
-and Core/Designer performance with 400 crosspoints.
+The automated tests mock the Q-SYS socket, timer and controls APIs. They
+complement, but do not replace, validation with the target device model and
+firmware, network setup, and UCI layout.
 
 Protocol reference: [Blackmagic Videohub Ethernet Protocol](https://documents.blackmagicdesign.com/DeveloperManuals/VideohubEthernetProtocol.pdf).
 

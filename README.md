@@ -10,7 +10,7 @@ compatibility information.
 
 | Manufacturer | Plugin | Status |
 | --- | --- | --- |
-| Blackmagic Design | [Videohub plugin](plugins/Blackmagic-Design/Blackmagic-Design-Videohub.qplug) · [Instructions](plugins/Blackmagic-Design/README.md) | Prototype; not yet validated in Designer or on hardware |
+| Blackmagic Design | [Videohub plugin](plugins/Blackmagic-Design/Blackmagic-Design-Videohub.qplug) · [Instructions](plugins/Blackmagic-Design/README.md) | Tested in Q-SYS Designer and with physical Videohub hardware |
 
 Download the `.qplug` file, then install it in Q-SYS Designer. See the
 individual plugin instructions for device support, installation and caveats.
