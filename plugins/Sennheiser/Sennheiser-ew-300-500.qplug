@@ -1,0 +1,429 @@
+PluginInfo = {
+  Name = "Sennheiser ew 300/500 Monitor",
+  Version = "0.2.1.0",
+  BuildVersion = "0.2.1.0",
+  Id = "db2741fc-49ec-4abc-8ae6-5f2c966cd062",
+  Author = "Vellum",
+  Description = "Monitor Sennheiser evolution wireless receivers"
+}
+
+local receiverPort = 53212
+local receivePort = 53212
+local pages = { "Configuration", "Monitoring" }
+local fields = {
+  "Name", "Frequency", "RF", "Antenna", "Pilot", "Audio",
+  "Audio Peak", "Mute", "Battery", "Warnings",
+  "RF 1 Min", "RF 1 Max", "RF 1 Active", "RF 2 Min", "RF 2 Max", "RF 2 Active"
+}
+local meterFields = {
+  { field = "RF 1 Max", name = "RF 1 Meter" },
+  { field = "RF 2 Max", name = "RF 2 Meter" },
+  { field = "Audio", name = "Audio Meter" },
+  { field = "Battery", name = "Battery Meter" }
+}
+local meterByField = {}
+for _, meter in ipairs(meterFields) do meterByField[meter.field] = meter.name end
+local columnsPerRow = 8
+
+local function controlName(index, field)
+  return string.format("Receiver %02d %s", index, field)
+end
+
+function GetProperties()
+  return {
+    { Name = "Receiver Count", Type = "integer", Min = 1, Max = 32, Value = 4 }
+  }
+end
+
+function GetPrettyName(props)
+  return "Sennheiser ew 300/500 Monitor\n" .. props["Receiver Count"].Value .. " receivers"
+end
+
+function GetColor()
+  return { 40, 75, 96 }
+end
+
+function GetPages()
+  return { { name = pages[1] }, { name = pages[2] } }
+end
+
+function GetControls(props)
+  local controls = {
+    { Name = "Last Error", ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" }
+  }
+  for index = 1, props["Receiver Count"].Value do
+    table.insert(controls, { Name = controlName(index, "IP Address"), ControlType = "Text", Count = 1, UserPin = true, PinStyle = "Input" })
+    table.insert(controls, { Name = controlName(index, "Online"), ControlType = "Indicator", IndicatorType = "Led", Count = 1, UserPin = true, PinStyle = "Output" })
+    table.insert(controls, { Name = controlName(index, "Status"), ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" })
+    for _, field in ipairs(fields) do
+      table.insert(controls, { Name = controlName(index, field), ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" })
+    end
+    for _, meter in ipairs(meterFields) do
+      table.insert(controls, { Name = controlName(index, meter.name), ControlType = "Knob", ControlUnit = "Integer", Min = 0, Max = 100, Count = 1, UserPin = true, PinStyle = "Output" })
+      table.insert(controls, { Name = controlName(index, meter.name .. " Valid"), ControlType = "Indicator", IndicatorType = "Led", Count = 1, UserPin = true, PinStyle = "Output" })
+    end
+  end
+  return controls
+end
+
+local function label(graphics, value, x, y, width)
+  table.insert(graphics, {
+    Type = "Text", Text = value, Position = { x, y },
+    Size = { width, 22 }, FontSize = 11, HTextAlign = "Left"
+  })
+end
+
+local function stripLabel(graphics, value, x, y, width)
+  table.insert(graphics, {
+    Type = "Text", Text = value, Position = { x, y }, Size = { width, 18 },
+    FontSize = 10, HTextAlign = "Left", Color = { 203, 214, 221 }
+  })
+end
+
+function GetControlLayout(props)
+  local layout, graphics = {}, {}
+  local configuration = pages[props["page_index"].Value] == "Configuration"
+  if configuration then
+    label(graphics, "Receiver", 12, 12, 65)
+    label(graphics, "IP address", 80, 12, 180)
+    label(graphics, "Online", 270, 12, 55)
+    label(graphics, "Status", 330, 12, 180)
+  end
+  for index = 1, props["Receiver Count"].Value do
+    if configuration then
+      local y = 40 + (index - 1) * 28
+      label(graphics, tostring(index), 12, y, 55)
+      layout[controlName(index, "Online")] = {
+        PrettyName = "Receiver " .. index .. "~Online", Style = "Led",
+        Position = { 280, y }, Size = { 18, 18 }
+      }
+      layout[controlName(index, "IP Address")] = {
+        PrettyName = "Receiver " .. index .. "~IP Address", Style = "TextBox",
+        Position = { 80, y }, Size = { 180, 22 }
+      }
+      layout[controlName(index, "Status")] = {
+        PrettyName = "Receiver " .. index .. "~Status", Style = "Text",
+        Position = { 330, y }, Size = { 250, 22 }
+      }
+    else
+      local x = 12 + ((index - 1) % columnsPerRow) * 208
+      local y = 12 + math.floor((index - 1) / columnsPerRow) * 490
+      table.insert(graphics, {
+        Type = "GroupBox", Position = { x, y }, Size = { 198, 480 },
+        Fill = { 38, 49, 57 }, StrokeColor = { 95, 113, 123 }, StrokeWidth = 1, CornerRadius = 4
+      })
+      stripLabel(graphics, string.format("RECEIVER %02d", index), x + 8, y + 8, 145)
+      layout[controlName(index, "Online")] = {
+        PrettyName = "Receiver " .. index .. "~Online", Style = "Led",
+        Position = { x + 170, y + 8 }, Size = { 16, 16 }, Color = { 62, 208, 133 }
+      }
+      local function text(field, dx, dy, width, height)
+        layout[controlName(index, field)] = {
+          PrettyName = "Receiver " .. index .. "~" .. field, Style = "Text",
+          Position = { x + dx, y + dy }, Size = { width, height or 20 },
+          Color = { 236, 242, 245 }, TextFontSize = 11, WordWrap = height ~= nil
+        }
+      end
+      text("Status", 8, 30, 180)
+      text("Name", 8, 54, 180)
+      stripLabel(graphics, "MHz", x + 8, y + 80, 38)
+      text("Frequency", 50, 78, 138)
+      stripLabel(graphics, "Ant", x + 8, y + 104, 30)
+      text("Antenna", 40, 102, 44)
+      stripLabel(graphics, "Pilot", x + 93, y + 104, 34)
+      text("Pilot", 130, 102, 58)
+      for i, heading in ipairs({ "R1 max", "R2 max", "AF", "Bat" }) do
+        local dx = 8 + (i - 1) * 45
+        stripLabel(graphics, heading, x + dx, y + 130, 43)
+        text(meterFields[i].field, dx, 150, 43)
+        layout[controlName(index, meterFields[i].name)] = {
+          PrettyName = "Receiver " .. index .. "~" .. meterFields[i].name,
+          Style = "Meter", MeterStyle = "Level", ShowTextBox = false, IsReadOnly = true,
+          Position = { x + dx + 9, y + 174 }, Size = { 24, 112 }, Color = { 55, 205, 132 }
+        }
+      end
+      for i, entry in ipairs({
+        { "Min 1", "RF 1 Min" }, { "Min 2", "RF 2 Min" },
+        { "Peak", "Audio Peak" }, { "RF", "RF" }
+      }) do
+        local dx = 8 + (i - 1) * 45
+        stripLabel(graphics, entry[1], x + dx, y + 290, 43)
+        text(entry[2], dx, 310, 43)
+      end
+      stripLabel(graphics, "Active since last update", x + 8, y + 335, 180)
+      stripLabel(graphics, "RF 1", x + 8, y + 356, 35)
+      text("RF 1 Active", 44, 354, 40)
+      stripLabel(graphics, "RF 2", x + 98, y + 356, 35)
+      text("RF 2 Active", 134, 354, 54)
+      stripLabel(graphics, "Mute", x + 8, y + 382, 40)
+      text("Mute", 50, 380, 138)
+      stripLabel(graphics, "Warnings", x + 8, y + 406, 100)
+      text("Warnings", 8, 426, 180, 46)
+    end
+  end
+  if configuration then
+    local y = 52 + props["Receiver Count"].Value * 28
+    label(graphics, "Last error", 12, y, 65)
+    layout["Last Error"] = { PrettyName = "Last Error", Style = "Text", Position = { 80, y }, Size = { 500, 22 } }
+  end
+  return layout, graphics
+end
+
+if Controls then
+  local count = Properties["Receiver Count"].Value
+  ewMonitorTimer = Timer.New()
+  ewMonitorSocket = nil
+  local socketOpen = false
+  local tick = Timer.Now()
+  local nextRenewal = tick + 10
+  local receivers = {}
+
+  local function errorMessage(message)
+    Controls["Last Error"].String = message
+    print("Sennheiser ew monitor: " .. message)
+  end
+
+  local function setStatus(index, status, online)
+    Controls[controlName(index, "Status")].String = status
+    Controls[controlName(index, "Online")].Boolean = online
+  end
+
+  local function clearField(index, field)
+    Controls[controlName(index, field)].String = "?"
+    receivers[index].updated[field] = nil
+    local meter = meterByField[field]
+    if meter then
+      Controls[controlName(index, meter)].Value = 0
+      Controls[controlName(index, meter .. " Valid")].Boolean = false
+    end
+  end
+
+  local function clearReceiver(index)
+    for _, field in ipairs(fields) do clearField(index, field) end
+    receivers[index].lastCyclic = nil
+    receivers[index].invalid = {}
+  end
+
+  local function setField(index, field, value)
+    Controls[controlName(index, field)].String = value
+    receivers[index].updated[field] = tick
+    local meter = meterByField[field]
+    if meter then
+      local numeric = tonumber(field == "Battery" and value:match("^(%d+)%%$") or value)
+      Controls[controlName(index, meter)].Value = numeric and math.min(numeric, 100) or 0
+      Controls[controlName(index, meter .. " Valid")].Boolean = numeric ~= nil
+    end
+  end
+
+  local function validAddress(address)
+    local a, b, c, d = address:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+    if not a then return nil end
+    local parts = { a, b, c, d }
+    for i, part in ipairs(parts) do
+      if #part > 3 or tonumber(part) > 255 then return nil end
+      parts[i] = tostring(tonumber(part))
+    end
+    if parts[1] == "0" or tonumber(parts[1]) >= 224 or parts[4] == "255" then return nil end
+    return table.concat(parts, ".")
+  end
+
+  local function send(index, command)
+    if not socketOpen then return false end
+    local ok, err = pcall(function() ewMonitorSocket:Send(receivers[index].address, receiverPort, command .. "\r") end)
+    if not ok then
+      errorMessage("Receiver " .. index .. " send failed: " .. tostring(err))
+      return false
+    end
+    return true
+  end
+
+  local function subscribe(index)
+    send(index, "Push 30 500 7")
+    send(index, "Name")
+    send(index, "Frequency")
+  end
+
+  local function configure()
+    tick = Timer.Now()
+    local addresses, counts, problems, changed = {}, {}, {}, {}
+    for index = 1, count do
+      local raw = Controls[controlName(index, "IP Address")].String:match("^%s*(.-)%s*$")
+      local address = validAddress(raw)
+      addresses[index] = address
+      if address then counts[address] = (counts[address] or 0) + 1 end
+    end
+    for index = 1, count do
+      local receiver = receivers[index]
+      local raw = Controls[controlName(index, "IP Address")].String:match("^%s*(.-)%s*$")
+      local address = addresses[index]
+      problems[index] = raw == "" and "Enter IP address" or (not address and "Invalid IP address" or (counts[address] > 1 and "Duplicate IP address" or nil))
+      changed[index] = receiver.address ~= address or receiver.problem ~= problems[index]
+      if changed[index] then
+        if receiver.address and not receiver.problem then send(index, "Push 0 0 0") end
+      end
+    end
+    for index = 1, count do
+      local receiver, problem = receivers[index], problems[index]
+      local raw = Controls[controlName(index, "IP Address")].String:match("^%s*(.-)%s*$")
+      if changed[index] then
+        clearReceiver(index)
+        receiver.address, receiver.problem = addresses[index], problem
+        if problem and raw ~= "" then errorMessage("Receiver " .. index .. ": " .. problem .. ".") end
+        if not problem and socketOpen then subscribe(index) end
+      end
+      if problem then
+        setStatus(index, problem, false)
+      elseif not socketOpen then
+        setStatus(index, "Socket unavailable", false)
+      elseif changed[index] then
+        setStatus(index, "Waiting for telemetry", false)
+      end
+    end
+  end
+
+  local function invalidResponse(index, key, line)
+    local receiver = receivers[index]
+    if not receiver.invalid[key] then errorMessage("Receiver " .. index .. ": invalid " .. key .. " response: " .. line) end
+    receiver.invalid[key] = true
+    return false
+  end
+
+  local function parseLine(index, line)
+    line = line:match("^%s*(.-)%s*$")
+    local receiver = receivers[index]
+    local key, value = line:match("^(%S+)%s+(.+)$")
+    if not key then return false end
+    if key:match("^%d%d%d%d:$") then
+      errorMessage("Receiver " .. index .. ": " .. line)
+      return false
+    elseif key == "Name" then
+      setField(index, "Name", value)
+    elseif key == "Frequency" then
+      local frequency, bank, channel = value:match("^(%d+)%s+(%d+)%s+(%d+)%s*$")
+      if not frequency then return invalidResponse(index, key, line) end
+      setField(index, "Frequency", string.format("%.3f", tonumber(frequency) / 1000))
+    elseif key == "RF1" or key == "RF2" then
+      local minimum, maximum, active = value:match("^(%d+)%s+(%d+)%s+(%d+)%s*$")
+      if not minimum or tonumber(minimum) > tonumber(maximum) or (active ~= "0" and active ~= "1") then
+        return invalidResponse(index, key, line)
+      end
+      local prefix = key == "RF1" and "RF 1 " or "RF 2 "
+      setField(index, prefix .. "Min", minimum)
+      setField(index, prefix .. "Max", maximum)
+      setField(index, prefix .. "Active", active == "1" and "Yes" or "No")
+      receiver.lastCyclic = tick
+    elseif key == "RF" then
+      local level, antenna, pilot = value:match("^(%d+)%s+(%d+)%s+(%d+)%s*$")
+      if not level or (antenna ~= "1" and antenna ~= "2") or (pilot ~= "0" and pilot ~= "1") then
+        return invalidResponse(index, key, line)
+      end
+      setField(index, "RF", level)
+      setField(index, "Antenna", antenna)
+      setField(index, "Pilot", pilot == "1" and "Yes" or "No")
+      receiver.lastCyclic = tick
+    elseif key == "AF" then
+      local level, peak, mute = value:match("^(%d+)%s+(%d+)%s+(%d+)%s*$")
+      mute = tonumber(mute)
+      if not level or not mute or mute > 15 then return invalidResponse(index, key, line) end
+      setField(index, "Audio", level)
+      setField(index, "Audio Peak", peak)
+      local states = {}
+      if math.floor(mute / 2) % 2 == 1 then table.insert(states, "TX") end
+      if math.floor(mute / 4) % 2 == 1 then table.insert(states, "RF") end
+      if math.floor(mute / 8) % 2 == 1 then table.insert(states, "RX") end
+      setField(index, "Mute", #states > 0 and table.concat(states, ", ") or (mute % 2 == 1 and "Muted" or "No"))
+      receiver.lastCyclic = tick
+    elseif key == "Bat" then
+      if value ~= "?" and value ~= "0" and value ~= "30" and value ~= "70" and value ~= "100" then
+        return invalidResponse(index, key, line)
+      end
+      setField(index, "Battery", value == "?" and "?" or value .. "%")
+      receiver.lastCyclic = tick
+    elseif key == "Msg" then
+      setField(index, "Warnings", value)
+      receiver.lastCyclic = tick
+    else
+      return false
+    end
+    receiver.invalid[key] = nil
+    return true
+  end
+
+  local function expire(index)
+    local receiver = receivers[index]
+    if receiver.lastCyclic and tick - receiver.lastCyclic >= 5 then
+      clearReceiver(index)
+      setStatus(index, "Telemetry timeout", false)
+    end
+    for _, field in ipairs(fields) do
+      local updated = receiver.updated[field]
+      local timeout = (field == "Name" or field == "Frequency") and 35 or 5
+      if updated and tick - updated >= timeout then clearField(index, field) end
+    end
+  end
+
+  local function onPacket(_, packet)
+    if type(packet) ~= "table" or type(packet.Address) ~= "string" or type(packet.Data) ~= "string" or packet.Port ~= receiverPort then return end
+    tick = Timer.Now()
+    for index = 1, count do
+      local receiver = receivers[index]
+      if not receiver.problem and receiver.address == packet.Address then
+        expire(index)
+        local data = packet.Data:gsub(";%s*([%a]+%d*)%s+", function(key)
+          if key == "RF" or key == "RF1" or key == "RF2" or key == "AF" or key == "Bat" or key == "Msg" or key == "Config" or key == "Name" or key == "Frequency" or key == "States" then
+            return "\r" .. key .. " "
+          end
+          return ";" .. key .. " "
+        end)
+        for line in (data .. "\r"):gmatch("([^\r\n]+)[\r\n]") do parseLine(index, line) end
+        if receiver.lastCyclic then setStatus(index, "Online", true) end
+        return
+      end
+    end
+  end
+
+  local function openSocket()
+    ewMonitorSocket = UdpSocket.New()
+    ewMonitorSocket.EventHandler = onPacket
+    local ok, err = pcall(function() ewMonitorSocket:Open(nil, receivePort) end)
+    if not ok then
+      socketOpen = false
+      errorMessage("Cannot open UDP receive port " .. receivePort .. ": " .. tostring(err))
+      return false
+    end
+    socketOpen = true
+    for index = 1, count do
+      if receivers[index].address and not receivers[index].problem then
+        setStatus(index, "Waiting for telemetry", false)
+        subscribe(index)
+      end
+    end
+    return true
+  end
+
+  ewMonitorTimer.EventHandler = function()
+    tick = Timer.Now()
+    local renew = tick >= nextRenewal
+    local reopened = false
+    if renew then
+      nextRenewal = tick + 10
+      if not socketOpen then reopened = openSocket() end
+    end
+    for index = 1, count do
+      local receiver = receivers[index]
+      if not receiver.problem and receiver.address and socketOpen then
+        expire(index)
+        if renew and not reopened then subscribe(index) end
+      end
+    end
+  end
+
+  for index = 1, count do
+    receivers[index] = { updated = {} }
+    clearReceiver(index)
+    Controls[controlName(index, "IP Address")].EventHandler = configure
+  end
+  configure()
+  openSocket()
+  ewMonitorTimer:Start(1)
+end

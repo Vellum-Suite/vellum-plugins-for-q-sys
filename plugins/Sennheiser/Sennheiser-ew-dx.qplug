@@ -1,0 +1,523 @@
+PluginInfo = {
+  Name = "Sennheiser EW-DX Monitor",
+  Version = "0.2.0.0",
+  BuildVersion = "0.2.0.0",
+  Id = "58485711-65c0-4570-92c4-ec592019d988",
+  Author = "Vellum",
+  Description = "Monitor one Sennheiser EW-DX receiver"
+}
+
+local models = { "EW-DX EM 2", "EW-DX EM 2 Dante", "EW-DX EM 4 Dante" }
+local fields = {
+  "Name", "Frequency", "RF Strength", "RF Quality", "Antenna",
+  "Audio Level", "RX Mute", "TX Mute", "Battery", "Battery Runtime", "Warnings", "TX Warnings"
+}
+local meterFields = {
+  { field = "RF Strength", name = "RF Strength Meter", min = -107, max = 0 },
+  { field = "RF Quality", name = "RF Quality Meter", min = 0, max = 100 },
+  { field = "Audio Level", name = "Audio Level Meter", min = -138.5, max = 0 },
+  { field = "Battery", name = "Battery Meter", min = 0, max = 100 }
+}
+local meterByField = {}
+for _, meter in ipairs(meterFields) do meterByField[meter.field] = meter end
+local function channelCount(props)
+  return props["Model"].Value == models[3] and 4 or 2
+end
+local function channelName(index, field)
+  return "Channel " .. index .. " " .. field
+end
+
+function GetProperties()
+  return { { Name = "Model", Type = "enum", Choices = models, Value = models[1] } }
+end
+
+function GetPrettyName(props)
+  return "Sennheiser EW-DX Monitor\n" .. props["Model"].Value
+end
+
+function GetColor() return { 40, 75, 96 } end
+function GetPages() return { { name = "Configuration" }, { name = "Monitoring" } } end
+
+function GetControls(props)
+  local controls = {
+    { Name = "IP Address", ControlType = "Text", Count = 1, UserPin = true, PinStyle = "Input" },
+    { Name = "Protocol", ControlType = "Text", Count = 1, UserPin = true, PinStyle = "Input" },
+    { Name = "Password", ControlType = "Text", Count = 1, UserPin = false },
+    { Name = "Online", ControlType = "Indicator", IndicatorType = "Led", Count = 1, UserPin = true, PinStyle = "Output" },
+    { Name = "Status", ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" },
+    { Name = "Last Error", ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" }
+  }
+  for index = 1, channelCount(props) do
+    for _, field in ipairs(fields) do
+      table.insert(controls, { Name = channelName(index, field), ControlType = "Indicator", IndicatorType = "Text", Count = 1, UserPin = true, PinStyle = "Output" })
+    end
+    for _, meter in ipairs(meterFields) do
+      table.insert(controls, { Name = channelName(index, meter.name), ControlType = "Knob", ControlUnit = "Float", Min = meter.min, Max = meter.max, Count = 1, UserPin = true, PinStyle = "Output" })
+      table.insert(controls, { Name = channelName(index, meter.name .. " Valid"), ControlType = "Indicator", IndicatorType = "Led", Count = 1, UserPin = true, PinStyle = "Output" })
+    end
+  end
+  return controls
+end
+
+local function label(graphics, text, x, y, width)
+  table.insert(graphics, { Type = "Text", Text = text, Position = { x, y }, Size = { width, 22 }, FontSize = 11, HTextAlign = "Left" })
+end
+
+local function stripLabel(graphics, text, x, y, width)
+  table.insert(graphics, {
+    Type = "Text", Text = text, Position = { x, y }, Size = { width, 18 },
+    FontSize = 10, HTextAlign = "Left", Color = { 203, 214, 221 }
+  })
+end
+
+function GetControlLayout(props)
+  local layout, graphics = {}, {}
+  if props["page_index"].Value == 1 then
+    local rows = {
+      { "IP Address", "TextBox" }, { "Protocol", "ComboBox" }, { "Password", "TextBox" },
+      { "Online", "Led" }, { "Status", "Text" }, { "Last Error", "Text" }
+    }
+    for i, row in ipairs(rows) do
+      local y = 12 + (i - 1) * 30
+      label(graphics, row[1], 12, y, 100)
+      layout[row[1]] = { PrettyName = row[1], Style = row[2], Position = { 120, y }, Size = { row[2] == "Led" and 18 or 390, 22 } }
+    end
+  else
+    label(graphics, "Online", 12, 12, 55)
+    layout["Online"] = { PrettyName = "Online", Style = "Led", Position = { 68, 12 }, Size = { 18, 18 } }
+    layout["Status"] = { PrettyName = "Status", Style = "Text", Position = { 95, 12 }, Size = { 350, 22 } }
+    for index = 1, channelCount(props) do
+      local x, y = 12 + (index - 1) * 208, 42
+      table.insert(graphics, {
+        Type = "GroupBox", Position = { x, y }, Size = { 198, 470 },
+        Fill = { 38, 49, 57 }, StrokeColor = { 95, 113, 123 }, StrokeWidth = 1, CornerRadius = 4
+      })
+      stripLabel(graphics, "CHANNEL " .. index, x + 8, y + 8, 180)
+      local function text(field, dx, dy, width, height)
+        layout[channelName(index, field)] = {
+          PrettyName = "Channel " .. index .. "~" .. field, Style = "Text",
+          Position = { x + dx, y + dy }, Size = { width, height or 20 },
+          Color = { 236, 242, 245 }, TextFontSize = 11, WordWrap = height ~= nil
+        }
+      end
+      text("Name", 8, 30, 180)
+      stripLabel(graphics, "MHz", x + 8, y + 56, 38)
+      text("Frequency", 50, 54, 138)
+      stripLabel(graphics, "Antenna", x + 8, y + 80, 60)
+      text("Antenna", 70, 78, 118)
+      for i, heading in ipairs({ "RF", "Link", "AF", "Bat" }) do
+        local dx = 8 + (i - 1) * 45
+        stripLabel(graphics, heading, x + dx, y + 100, 43)
+        text(meterFields[i].field, dx, 120, 43)
+        layout[channelName(index, meterFields[i].name)] = {
+          PrettyName = "Channel " .. index .. "~" .. meterFields[i].name,
+          Style = "Meter", MeterStyle = "Level", ShowTextBox = false, IsReadOnly = true,
+          Position = { x + dx + 9, y + 144 }, Size = { 24, 112 }, Color = { 55, 205, 132 }
+        }
+      end
+      for i, unit in ipairs({ "dBm", "%", "dBFS", "%" }) do
+        stripLabel(graphics, unit, x + 8 + (i - 1) * 45, y + 260, 43)
+      end
+      stripLabel(graphics, "Runtime (min)", x + 8, y + 286, 90)
+      text("Battery Runtime", 105, 284, 83)
+      stripLabel(graphics, "RX mute", x + 8, y + 312, 50)
+      text("RX Mute", 59, 310, 35)
+      stripLabel(graphics, "TX mute", x + 98, y + 312, 50)
+      text("TX Mute", 150, 310, 38)
+      stripLabel(graphics, "RX warnings", x + 8, y + 338, 180)
+      text("Warnings", 8, 358, 180, 34)
+      stripLabel(graphics, "TX warnings", x + 8, y + 396, 180)
+      text("TX Warnings", 8, 416, 180, 46)
+    end
+  end
+  return layout, graphics
+end
+
+if Controls then
+  local json = require("rapidjson")
+  local count = channelCount(Properties)
+  local updated, mates = {}, {}
+  local generation, requestId = 0, 0
+  local address, mode, password, pending, lastReply, lastPoll, waitingSince = nil, nil, nil, nil, nil, 0, nil
+  local nextSocketAttempt, retryAfter, cursor = 0, 0, 0
+  local socketOpen = false
+  local jobs = {}
+  ewDxTimer = Timer.New()
+  ewDxSocket = nil
+
+  local function status(text, online)
+    Controls["Status"].String = text
+    Controls["Online"].Boolean = online
+  end
+  local function problem(text)
+    if Controls["Last Error"].String ~= text then
+      Controls["Last Error"].String = text
+      print("Sennheiser EW-DX: " .. text)
+    end
+  end
+  local function clear(index, field)
+    Controls[channelName(index, field)].String = "?"
+    updated[index][field] = nil
+    local meter = meterByField[field]
+    if meter then
+      Controls[channelName(index, meter.name)].Value = meter.min
+      Controls[channelName(index, meter.name .. " Valid")].Boolean = false
+    end
+  end
+  local function set(index, field, value)
+    Controls[channelName(index, field)].String = value
+    updated[index][field] = Timer.Now()
+    local meter = meterByField[field]
+    if meter then
+      Controls[channelName(index, meter.name)].Value = tonumber(value)
+      Controls[channelName(index, meter.name .. " Valid")].Boolean = true
+    end
+  end
+  local function clearAll()
+    for i = 1, count do
+      updated[i], mates[i] = {}, nil
+      for _, field in ipairs(fields) do clear(i, field) end
+    end
+    lastReply = nil
+  end
+  local function validAddress(value)
+    local a, b, c, d = value:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+    if not a then return nil end
+    local parts = { a, b, c, d }
+    for i, part in ipairs(parts) do
+      if #part > 3 or tonumber(part) > 255 then return nil end
+      parts[i] = tostring(tonumber(part))
+    end
+    if parts[1] == "0" or tonumber(parts[1]) >= 224 or parts[4] == "255" then return nil end
+    return table.concat(parts, ".")
+  end
+  local function numeric(index, field, value, format, minimum, maximum)
+    if type(value) == "number" and value >= minimum and value <= maximum then
+      set(index, field, string.format(format, value))
+    else
+      clear(index, field)
+    end
+  end
+  local function boolean(index, field, value)
+    if type(value) == "boolean" then set(index, field, value and "Yes" or "No") else clear(index, field) end
+  end
+  local function warnings(index, field, value)
+    if type(value) ~= "table" then clear(index, field); return end
+    for _, item in ipairs(value) do
+      if type(item) ~= "string" then clear(index, field); return end
+    end
+    set(index, field, #value == 0 and "None" or table.concat(value, ", "))
+  end
+  local function antenna(index, value)
+    if value == 0 then set(index, "Antenna", "None")
+    elseif value == 1 then set(index, "Antenna", "A")
+    elseif value == 2 then set(index, "Antenna", "B")
+    else clear(index, "Antenna") end
+  end
+  local function battery(index, value, partial)
+    if type(value) ~= "table" then
+      clear(index, "Battery"); clear(index, "Battery Runtime"); return
+    end
+    if not partial or value.gauge ~= nil then numeric(index, "Battery", value.gauge, "%.0f", 0, 100) end
+    if not partial or value.lifetime ~= nil then numeric(index, "Battery Runtime", value.lifetime, "%.0f", 0, 100000) end
+  end
+  local function clearTransmitter(index)
+    battery(index, nil)
+    clear(index, "TX Mute")
+    clear(index, "TX Warnings")
+  end
+  local function rx(index, value, v2)
+    if type(value) ~= "table" then return end
+    if value.name ~= nil then
+      if type(value.name) == "string" then set(index, "Name", value.name) else clear(index, "Name") end
+    elseif v2 then clear(index, "Name") end
+    if value.mute ~= nil or v2 then boolean(index, "RX Mute", value.mute) end
+    if value.frequency ~= nil then numeric(index, "Frequency", value.frequency, "%.3f", 0, 10000000) end
+    if value.warnings ~= nil then warnings(index, "Warnings", value.warnings) end
+    if value.mates ~= nil or v2 then
+      local name = type(value.mates) == "table" and value.mates[1] or nil
+      local number = type(name) == "string" and name:match(v2 and "^TX(%d+)$" or "^mates/tx(%d+)$") or nil
+      number = tonumber(number)
+      if not number or number < 1 or number > count then number = nil end
+      if mates[index] ~= number then clearTransmitter(index) end
+      mates[index] = number
+    end
+  end
+
+  local function closeSocket()
+    if socketOpen then
+      local ok = pcall(function() ewDxSocket:Close() end)
+      if not ok then problem("Could not close the SSCv1 UDP socket") end
+    end
+    socketOpen = false
+    ewDxSocket = nil
+  end
+  local function legacyErrors(node, path)
+    if type(node) ~= "table" then return end
+    if type(node[1]) == "number" then
+      local code = node[1]
+      local tx = path:match("^/mates/tx(%d+)/")
+      if code == 424 and tx then
+        for i = 1, count do
+          if mates[i] == tonumber(tx) then
+            if path:match("/battery/gauge$") then clear(i, "Battery")
+            elseif path:match("/battery/lifetime$") then clear(i, "Battery Runtime")
+            elseif path:match("/mute$") then clear(i, "TX Mute")
+            elseif path:match("/warnings$") then clear(i, "TX Warnings")
+            else clearTransmitter(i) end
+          end
+        end
+      else
+        local rxIndex, rxField = path:match("^/rx(%d+)/([^/]+)$")
+        local meterIndex, meterField = path:match("^/m/rx(%d+)/([^/]+)$")
+        local names = { name = "Name", frequency = "Frequency", mute = "RX Mute", warnings = "Warnings" }
+        local meters = { rssi = "RF Strength", rsqi = "RF Quality", divi = "Antenna", af = "Audio Level" }
+        rxIndex, meterIndex = tonumber(rxIndex), tonumber(meterIndex)
+        if rxIndex and rxIndex >= 1 and rxIndex <= count and names[rxField] then clear(rxIndex, names[rxField]) end
+        if meterIndex and meterIndex >= 1 and meterIndex <= count and meters[meterField] then clear(meterIndex, meters[meterField]) end
+        problem("SSCv1 error " .. tostring(code) .. " at " .. path)
+      end
+      return
+    end
+    for key, value in pairs(node) do
+      if type(key) == "string" then legacyErrors(value, path .. "/" .. key) end
+    end
+  end
+  local function legacyPacket(packet)
+    if mode ~= "SSCv1" or not address or packet.Address ~= address or packet.Port ~= 45 then return end
+    local data = json.decode(packet.Data)
+    if type(data) ~= "table" then problem("Invalid SSCv1 JSON response"); return end
+    if type(data.osc) == "table" and type(data.osc.error) == "table" then
+      for _, item in ipairs(data.osc.error) do legacyErrors(item, "") end
+    end
+    local received = false
+    for i = 1, count do
+      local r = data["rx" .. i]
+      if type(r) == "table" then
+        if type(r.frequency) == "number" then r.frequency = r.frequency / 1000 end
+        rx(i, r, false)
+        received = received or type(r.name) == "string" or type(r.mute) == "boolean"
+          or type(r.frequency) == "number" or type(r.warnings) == "table"
+      end
+      local m = type(data.m) == "table" and data.m["rx" .. i] or nil
+      if type(m) == "table" then
+        if m.rssi ~= nil then numeric(i, "RF Strength", m.rssi, "%.1f", -107, 0) end
+        if m.rsqi ~= nil then numeric(i, "RF Quality", m.rsqi, "%.0f", 0, 100) end
+        if m.divi ~= nil then antenna(i, m.divi) end
+        if m.af ~= nil then numeric(i, "Audio Level", m.af, "%.1f", -138.5, 0) end
+        received = received or type(m.rssi) == "number" or type(m.rsqi) == "number"
+          or type(m.divi) == "number" or type(m.af) == "number"
+      end
+      local tx = mates[i] and type(data.mates) == "table" and data.mates["tx" .. mates[i]] or nil
+      if type(tx) == "table" then
+        if tx.battery ~= nil then battery(i, tx.battery, true) end
+        if tx.mute ~= nil then boolean(i, "TX Mute", tx.mute) end
+        if tx.warnings ~= nil then warnings(i, "TX Warnings", tx.warnings) end
+      end
+    end
+    if received then lastReply = Timer.Now(); status("Online", true) end
+  end
+  local function openSocket()
+    ewDxSocket = UdpSocket.New()
+    ewDxSocket.EventHandler = function(_, packet) legacyPacket(packet) end
+    local ok = pcall(function() ewDxSocket:Open() end)
+    if not ok then
+      ewDxSocket = nil
+      problem("Unable to open SSCv1 UDP socket")
+      status("Socket unavailable", false)
+      return false
+    end
+    socketOpen = true
+    return true
+  end
+  local function legacySend(value)
+    local encoded = json.encode(value)
+    if not encoded then problem("Could not encode SSCv1 request"); return end
+    local ok = pcall(function() ewDxSocket:Send(address, 45, encoded) end)
+    if not ok then
+      problem("SSCv1 UDP send failed")
+      status("UDP send failed", false)
+      closeSocket()
+      nextSocketAttempt = Timer.Now() + 10
+    end
+  end
+  local function legacyPoll()
+    local request = { m = {}, mates = {} }
+    for i = 1, count do
+      local key = "rx" .. i
+      request[key] = { name = json.null, frequency = json.null, mute = json.null, warnings = json.null, mates = json.null }
+      request.m[key] = { rssi = json.null, rsqi = json.null, divi = json.null, af = json.null }
+      if mates[i] then
+        request.mates["tx" .. mates[i]] = { battery = { gauge = json.null, lifetime = json.null }, mute = json.null, warnings = json.null }
+      end
+    end
+    if next(request.mates) == nil then request.mates = nil end
+    legacySend(request)
+  end
+
+  local function buildJobs()
+    jobs = {}
+    for i = 1, count do
+      local base = "/api/channel/" .. (i - 1)
+      table.insert(jobs, { index = i, kind = "rx", path = base })
+      table.insert(jobs, { index = i, kind = "warnings", path = base .. "/warnings" })
+      table.insert(jobs, { index = i, kind = "frequency", path = "/api/rf/channels/" .. (i - 1) })
+      for _, entry in ipairs({
+        { "rssi", "signalStrengthIndicator" }, { "rsqi", "signalQualityIndicator" },
+        { "divi", "diversityIndicator" }, { "af", "level" }
+      }) do
+        table.insert(jobs, { index = i, kind = entry[1], path = base .. "/" .. entry[2] })
+      end
+      table.insert(jobs, { index = i, kind = "battery" })
+      table.insert(jobs, { index = i, kind = "tx" })
+      table.insert(jobs, { index = i, kind = "txWarnings" })
+    end
+  end
+  local function clearJob(job)
+    local i, kind = job.index, job.kind
+    if kind == "battery" then battery(i, nil)
+    elseif kind == "tx" then clear(i, "TX Mute")
+    elseif kind == "txWarnings" then clear(i, "TX Warnings")
+    elseif kind == "rx" then clear(i, "Name"); clear(i, "RX Mute"); mates[i] = nil; clearTransmitter(i)
+    elseif kind == "warnings" then clear(i, "Warnings")
+    elseif kind == "frequency" then clear(i, "Frequency")
+    elseif kind == "rssi" then clear(i, "RF Strength")
+    elseif kind == "rsqi" then clear(i, "RF Quality")
+    elseif kind == "divi" then clear(i, "Antenna")
+    elseif kind == "af" then clear(i, "Audio Level") end
+  end
+  local function httpResult(job, code, body)
+    local i, kind = job.index, job.kind
+    if code == 422 and (kind == "battery" or kind == "tx" or kind == "txWarnings") then
+      clearJob(job)
+      lastReply = Timer.Now()
+      status("Online", true)
+      return
+    end
+    if code ~= 200 then
+      clearJob(job)
+      local message = code == 401 and "SSCv2 authentication failed" or code == 403 and "SSCv2 access forbidden" or
+        (type(code) == "number" and code > 0 and ("SSCv2 HTTP " .. code .. " for " .. job.path) or "SSCv2 HTTPS request failed")
+      problem(message)
+      status(message, false)
+      if code == 401 or code == 403 or type(code) ~= "number" or code <= 0 then
+        clearAll()
+        retryAfter = Timer.Now() + 5
+      end
+      return
+    end
+    local data = json.decode(body or "")
+    if type(data) ~= "table" then
+      clearJob(job)
+      problem("Invalid SSCv2 JSON for " .. job.path)
+      status("Invalid SSCv2 response", false)
+      return
+    end
+    if kind == "rx" then rx(i, data, true)
+    elseif kind == "warnings" then warnings(i, "Warnings", data)
+    elseif kind == "frequency" then
+      numeric(i, "Frequency", type(data.frequency) == "number" and data.frequency / 1000 or nil, "%.3f", 0, 10000)
+    elseif kind == "rssi" then numeric(i, "RF Strength", data.value, "%.1f", -107, 0)
+    elseif kind == "rsqi" then numeric(i, "RF Quality", data.value, "%.0f", 0, 100)
+    elseif kind == "divi" then antenna(i, data.value)
+    elseif kind == "af" then numeric(i, "Audio Level", data.value, "%.1f", -138.5, 0)
+    elseif kind == "battery" then battery(i, data)
+    elseif kind == "tx" then boolean(i, "TX Mute", data.mute)
+    elseif kind == "txWarnings" then warnings(i, "TX Warnings", data) end
+    lastReply = Timer.Now()
+    status("Online", true)
+  end
+  local function httpPoll()
+    cursor = cursor % #jobs + 1
+    local job = jobs[cursor]
+    local path = job.path
+    if job.kind == "battery" or job.kind == "tx" or job.kind == "txWarnings" then
+      if not mates[job.index] then clearJob(job); return end
+      path = "/api/transmitters/" .. (mates[job.index] - 1)
+      if job.kind == "battery" then path = path .. "/battery"
+      elseif job.kind == "txWarnings" then path = path .. "/warnings" end
+    end
+    local actualJob = { index = job.index, kind = job.kind, path = path }
+    requestId = requestId + 1
+    local id, currentGeneration = requestId, generation
+    pending = { id = id, started = Timer.Now() }
+    local ok = pcall(function()
+      HttpClient.Download {
+        Url = "https://" .. address .. path, User = "api", Password = password,
+        Auth = "basic", Timeout = 5,
+        EventHandler = function(_, code, body)
+          if currentGeneration ~= generation or not pending or pending.id ~= id then return end
+          pending = nil
+          httpResult(actualJob, code, body)
+        end
+      }
+    end)
+    if not ok then
+      pending = nil
+      clearAll()
+      problem("Unable to start SSCv2 HTTPS request")
+      status("HTTPS request failed", false)
+      retryAfter = Timer.Now() + 5
+    end
+  end
+  local function configure()
+    generation = generation + 1
+    pending, cursor, lastPoll, retryAfter, waitingSince = nil, 0, 0, 0, nil
+    closeSocket()
+    clearAll()
+    Controls["Last Error"].String = ""
+    local raw = Controls["IP Address"].String:match("^%s*(.-)%s*$")
+    address = validAddress(raw)
+    mode, password = Controls["Protocol"].String, Controls["Password"].String
+    if raw == "" then status("Enter IP address", false); return end
+    if not address then status("Invalid IP address", false); problem("Invalid IP address"); return end
+    if mode ~= "SSCv1" and mode ~= "SSCv2" then
+      status("Select SSCv1 or SSCv2", false); problem("Invalid protocol selection"); return
+    end
+    if mode == "SSCv2" and password == "" then status("Enter SSCv2 password", false); return end
+    waitingSince = Timer.Now()
+    status("Waiting for telemetry", false)
+    if mode == "SSCv1" then
+      nextSocketAttempt = Timer.Now()
+    end
+  end
+  Controls["Protocol"].Choices = { "SSCv2", "SSCv1" }
+  if Controls["Protocol"].String == "" then Controls["Protocol"].String = "SSCv2" end
+  for _, name in ipairs({ "IP Address", "Protocol", "Password" }) do Controls[name].EventHandler = configure end
+  buildJobs()
+  configure()
+  ewDxTimer.EventHandler = function()
+    local now = Timer.Now()
+    for i = 1, count do
+      for field, timestamp in pairs(updated[i]) do
+        if now - timestamp >= 40 then clear(i, field) end
+      end
+    end
+    if lastReply and now - lastReply >= 40 then
+      clearAll()
+      status("Telemetry timeout", false)
+      waitingSince = nil
+    elseif waitingSince and not lastReply and now - waitingSince >= 40 and socketOpen then
+      status("Telemetry timeout", false)
+      waitingSince = nil
+    end
+    if not address or (mode ~= "SSCv1" and mode ~= "SSCv2") or (mode == "SSCv2" and password == "") then return end
+    if mode == "SSCv1" then
+      if not socketOpen and now >= nextSocketAttempt then
+        nextSocketAttempt = now + 10
+        if openSocket() then lastPoll, waitingSince = now - 2, now; status("Waiting for telemetry", false) end
+      end
+      if socketOpen and now - lastPoll >= 2 then lastPoll = now; legacyPoll() end
+    else
+      if pending and now - pending.started >= 7 then
+        pending = nil
+        clearAll()
+        problem("SSCv2 HTTPS request timed out")
+        status("HTTPS request timed out", false)
+        retryAfter = now + 5
+      end
+      if not pending and now >= retryAfter then httpPoll() end
+    end
+  end
+  ewDxTimer:Start(0.25)
+end

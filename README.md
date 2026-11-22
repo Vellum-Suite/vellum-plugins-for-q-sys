@@ -1,6 +1,7 @@
-# Vellum Plugins for the Q-SYS™ Platform
+# vellum-plugins-for-q-sys
 
-Open-source integrations for third-party AV devices, developed by Vellum.
+Open-source plugins for the Q-SYS™ platform and third-party AV devices,
+developed by Vellum.
 
 ## Find a plugin
 
@@ -11,6 +12,8 @@ compatibility information.
 | Manufacturer | Plugin | Status |
 | --- | --- | --- |
 | Blackmagic Design | [Videohub plugin](plugins/Blackmagic-Design/Blackmagic-Design-Videohub.qplug) · [Instructions](plugins/Blackmagic-Design/README.md) | Tested in Q-SYS Designer and with physical Videohub hardware |
+| Sennheiser | [ew 300/500 monitor](plugins/Sennheiser/Sennheiser-ew-300-500.qplug) · [Instructions](plugins/Sennheiser/README.md) | Tested in Q-SYS Designer and with physical receiver hardware |
+| Sennheiser | [EW-DX monitor](plugins/Sennheiser/Sennheiser-ew-dx.qplug) · [Instructions](plugins/Sennheiser/EW-DX-README.md) | Tested in Q-SYS Designer and with physical receiver hardware |
 
 Download the `.qplug` file, then install it in Q-SYS Designer. See the
 individual plugin instructions for device support, installation and caveats.
