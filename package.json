@@ -4,7 +4,7 @@
   "private": true,
   "description": "Development tests for Vellum plugins for the Q-SYS platform",
   "scripts": {
-    "test": "fengari tests\\Blackmagic-Design\\videohub_spec.lua"
+    "test": "fengari -e \"local ok,err=pcall(dofile,arg[0]); if not ok then print(err) end; os.exit(ok and 0 or 1)\" -- tests\\Blackmagic-Design\\videohub_spec.lua && fengari -e \"local ok,err=pcall(dofile,arg[0]); if not ok then print(err) end; os.exit(ok and 0 or 1)\" -- tests\\Sennheiser\\ew_monitor_spec.lua && fengari -e \"local ok,err=pcall(dofile,arg[0]); if not ok then print(err) end; os.exit(ok and 0 or 1)\" -- tests\\Sennheiser\\ewdx_monitor_spec.lua"
   },
   "devDependencies": {
     "fengari-node-cli": "^0.1.0"
